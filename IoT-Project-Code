@@ -1,0 +1,99 @@
+#include "MQ135.h"
+#include "ThingSpeak.h"
+#include<WiFi.h>
+
+MQ135 gasSensor = MQ135(35);
+const char* ssid = "realme 6i";
+const char* pass = "asdfghjkl";
+const int SENSOR_PIN = 36;
+const int sampleWindow = 50;
+unsigned int sample;
+WiFiClient  client;
+unsigned long myChannelNumber = myChannelNumber;
+const char *myWriteAPIKey = "<myWriteAPIKey>";
+
+void setup() {
+  // initialize digital pin LED_BUILTIN as an output.
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode (SENSOR_PIN, INPUT);
+
+  Serial.begin (19200);
+  connectWifi();
+  ThingSpeak.begin(client);
+}
+
+void loop() {
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(1000);
+  digitalWrite(LED_BUILTIN, LOW);
+
+  float ppm = gasSensor.getPPM();
+  Serial.print ("ppm: ");
+  Serial.print (ppm);
+  float rzero = gasSensor.getRZero();
+  Serial.print ("    rzero: ");
+  Serial.println (rzero);
+
+  float noiseLevel = getNoiseLevel();
+  Serial.print("Noise:");
+  Serial.println(noiseLevel);
+
+
+  int x = ThingSpeak.setField(1, noiseLevel);
+  int y = ThingSpeak.setField(2, ppm);
+  ThingSpeak.writeFields(myChannelNumber,myWriteAPIKey);
+  
+  Serial.print("Noise-Level status:");
+  Serial.print(x);
+  Serial.print("     PPM status:");
+  Serial.println(y);
+  Serial.println("");
+
+  delay(17000);
+}
+
+void connectWifi() {
+  WiFi.mode(WIFI_STA);
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.print("Attempting to connect to SSID: ");
+    Serial.println(ssid);
+    while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+      WiFi.begin(ssid, pass);  // Connect to WPA/WPA2 network. Change this line if using open or WEP network
+      Serial.print("Status:");
+      Serial.println(WiFi.status());
+      delay(5000);
+    }
+    Serial.println("Connected.");
+  }
+}
+
+
+float getNoiseLevel() {
+  unsigned long startMillis = millis();
+  float peakToPeak = 0;
+
+  unsigned int signalMax = 0;
+  unsigned int signalMin = 1024;
+
+
+  while (millis() - startMillis < sampleWindow)
+  {
+    sample = analogRead(SENSOR_PIN);
+    if (sample < 1024)
+    {
+      if (sample > signalMax)
+      {
+        signalMax = sample;
+      }
+      else if (sample < signalMin)
+      {
+        signalMin = sample;
+      }
+    }
+  }
+
+  peakToPeak = signalMax - signalMin;
+  int db = map(peakToPeak, 20, 900, 49.5, 90);
+
+  return db;
+}
